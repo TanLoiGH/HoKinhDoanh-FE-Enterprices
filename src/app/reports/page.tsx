@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/axios";
 import * as XLSX from "xlsx";
+import * as mammoth from "mammoth";
 
 interface PnlReport {
   from: string;
@@ -153,15 +154,11 @@ export default function ReportsPage() {
   const printPdfView = () => {
     if (!report) return;
 
-    const rows = forecast.map((item) => `
-      <tr>
-        <td>${item.productName}</td>
-        <td>${item.currentStock}</td>
-        <td>${item.averageDailyDemand}</td>
-        <td>${item.suggestedImportQty}</td>
-        <td>${item.riskLevel}</td>
-      </tr>
-    `).join("");
+    const today = new Date();
+    const day = today.getDate().toString().padStart(2, '0');
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const year = today.getFullYear();
+    const dateString = `..........., ngày ${day} tháng ${month} năm ${year}`;
 
     const html = `
       <!doctype html>
@@ -170,49 +167,181 @@ export default function ReportsPage() {
         <meta charset="utf-8" />
         <title>Bao cao HKD ${from} ${to}</title>
         <style>
-          body { font-family: Arial, sans-serif; color: #0f172a; margin: 32px; }
-          h1 { margin: 0 0 6px; font-size: 26px; }
-          p { margin: 0 0 20px; color: #475569; }
-          .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-bottom: 24px; }
-          .card { border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px 16px; }
-          .label { font-size: 11px; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
-          .value { font-size: 18px; font-weight: 700; }
-          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-          th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; font-size: 12px; }
-          th { background: #f8fafc; text-transform: uppercase; }
+          @page { size: A4; margin: 20mm 20mm 20mm 30mm; }
+          body { font-family: "Times New Roman", Times, serif; font-size: 14pt; color: #000; line-height: 1.5; margin: 0; padding: 0; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 24px; text-align: center; }
+          .header-left { flex: 1; }
+          .header-right { flex: 1.2; }
+          .header-left .org { font-weight: bold; text-transform: uppercase; font-size: 13pt; }
+          .header-left .sub { font-size: 13pt; }
+          .header-left .line { width: 40%; border-top: 1px solid black; margin: 5px auto; }
+          .header-right .nation { font-weight: bold; text-transform: uppercase; font-size: 13pt; }
+          .header-right .motto { font-weight: bold; font-size: 14pt; }
+          .header-right .line { width: 50%; border-top: 1px solid black; margin: 5px auto; }
+          .header-right .date { font-size: 14pt; font-style: italic; margin-top: 10px; }
+          .title { text-align: center; font-weight: bold; font-size: 14pt; margin-top: 20px; text-transform: uppercase; }
+          .subtitle { text-align: center; font-weight: bold; font-size: 14pt; margin-bottom: 20px; }
+          .content { text-align: justify; }
+          .section-title { font-weight: bold; margin-top: 15px; margin-bottom: 10px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; margin-bottom: 20px; }
+          th, td { border: 1px solid #000; padding: 6px; text-align: left; font-size: 13pt; }
+          th { font-weight: bold; text-align: center; }
+          .footer { display: flex; justify-content: space-between; margin-top: 30px; }
+          .footer-left { flex: 1; font-size: 12pt; }
+          .footer-left .title { text-align: left; font-weight: bold; font-style: italic; font-size: 12pt; margin-top: 0; text-transform: none; }
+          .footer-right { flex: 1; text-align: center; }
+          .footer-right .role { font-weight: bold; }
+          .footer-right .sign { height: 80px; }
+          .footer-right .name { font-weight: bold; }
         </style>
       </head>
       <body>
-        <h1>Báo cáo HKD Enterprise</h1>
-        <p>Khoảng thời gian: ${from} đến ${to}</p>
-        <div class="grid">
-          <div class="card"><div class="label">Doanh thu</div><div class="value">${formatCurrency(report.revenue)}</div></div>
-          <div class="card"><div class="label">Giá vốn</div><div class="value">${formatCurrency(report.cogs)}</div></div>
-          <div class="card"><div class="label">Lợi nhuận gộp</div><div class="value">${formatCurrency(report.grossProfit)}</div></div>
-          <div class="card"><div class="label">Lợi nhuận ròng</div><div class="value">${formatCurrency(report.netProfit)}</div></div>
+        <div class="header">
+          <div class="header-left">
+            <div class="org">HỘ KINH DOANH ENTERPRISE</div>
+            <div class="sub">Số: 01/BC-HKD</div>
+            <div class="line"></div>
+          </div>
+          <div class="header-right">
+            <div class="nation">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+            <div class="motto">Độc lập - Tự do - Hạnh phúc</div>
+            <div class="line"></div>
+            <div class="date">${dateString}</div>
+          </div>
         </div>
-        <h2>Dự báo nhập hàng</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Sản phẩm</th>
-              <th>Tồn</th>
-              <th>TB/ngày</th>
-              <th>Gợi ý nhập</th>
-              <th>Rủi ro</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+        
+        <div class="title">BÁO CÁO</div>
+        <div class="subtitle">Về tình hình kinh doanh và dự báo nhập hàng<br/>(Từ ngày ${from} đến ngày ${to})</div>
+        
+        <div class="content">
+          <div class="section-title">1. Tình hình tài chính</div>
+          <p>Trong kỳ báo cáo từ ${from} đến ${to}, tình hình doanh thu và lợi nhuận của hộ kinh doanh được ghi nhận như sau:</p>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50%;">Chỉ tiêu</th>
+                <th style="width: 50%;">Giá trị</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Doanh thu</td><td style="text-align: right;">${formatCurrency(report.revenue)}</td></tr>
+              <tr><td>Giá vốn hàng bán</td><td style="text-align: right;">${formatCurrency(report.cogs)}</td></tr>
+              <tr><td>Lợi nhuận gộp</td><td style="text-align: right;">${formatCurrency(report.grossProfit)}</td></tr>
+              <tr><td>Chi phí vận hành</td><td style="text-align: right;">${formatCurrency(report.operatingExpense)}</td></tr>
+              <tr><td><b>Lợi nhuận ròng</b></td><td style="text-align: right;"><b>${formatCurrency(report.netProfit)}</b></td></tr>
+            </tbody>
+          </table>
+
+          <div class="section-title">2. Dự báo và gợi ý nhập hàng</div>
+          <p>Dựa trên dữ liệu bán hàng trung bình, hệ thống đưa ra dự báo và gợi ý nhập hàng trong 14 ngày tới đối với các mặt hàng như sau:</p>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 8%;">STT</th>
+                <th style="width: 32%;">Tên sản phẩm</th>
+                <th style="width: 15%;">Tồn kho</th>
+                <th style="width: 15%;">Bán TB/ngày</th>
+                <th style="width: 15%;">Gợi ý nhập</th>
+                <th style="width: 15%;">Rủi ro</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${forecast.map((item, index) => `
+                <tr>
+                  <td style="text-align: center;">${index + 1}</td>
+                  <td>${item.productName}</td>
+                  <td style="text-align: right;">${item.currentStock}</td>
+                  <td style="text-align: right;">${item.averageDailyDemand}</td>
+                  <td style="text-align: right;">${item.suggestedImportQty}</td>
+                  <td style="text-align: center;">${item.riskLevel === "HIGH" ? "Cao" : "Bình thường"}</td>
+                </tr>
+              `).join("")}
+              ${forecast.length === 0 ? `<tr><td colspan="6" style="text-align: center;">Không có dữ liệu dự báo</td></tr>` : ""}
+            </tbody>
+          </table>
+          <p>Trên đây là Báo cáo tình hình kinh doanh và dự báo nhập hàng của Hộ kinh doanh Enterprise kính trình các cơ quan chức năng hoặc lưu nội bộ.</p>
+        </div>
+
+        <div class="footer">
+          <div class="footer-left">
+            <div class="title">Nơi nhận:</div>
+            <div>- Như trên;</div>
+            <div>- Lưu: Hồ sơ.</div>
+          </div>
+          <div class="footer-right">
+            <div class="role">ĐẠI DIỆN HỘ KINH DOANH</div>
+            <div class="sign"></div>
+            <div class="name"></div>
+          </div>
+        </div>
+
         <script>window.print(); window.onafterprint = () => window.close();</script>
       </body>
       </html>
     `;
 
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=900");
+    const printWindow = window.open("", "_blank", "width=1200,height=900");
     if (!printWindow) return;
     printWindow.document.write(html);
     printWindow.document.close();
+  };
+
+  const printTaxReport = async () => {
+    if (!report) return;
+    
+    try {
+      const response = await fetch("/tax-template.docx");
+      if (!response.ok) throw new Error("Could not fetch the tax template.");
+      const arrayBuffer = await response.arrayBuffer();
+      
+      const options = {
+        styleMap: [
+          "p[style-name='Normal'] => p:fresh",
+        ]
+      };
+      
+      const result = await mammoth.convertToHtml({ arrayBuffer }, options);
+      let htmlContent = result.value;
+      
+      const revenueStr = formatCurrency(report.revenue);
+      
+      htmlContent = htmlContent
+        .replace(/\[08a\]/g, revenueStr)
+        .replace(/\[11\]/g, revenueStr);
+        
+      const html = `
+        <!doctype html>
+        <html lang="vi">
+        <head>
+          <meta charset="utf-8" />
+          <title>Tờ Khai Thuế</title>
+          <style>
+            body { font-family: "Times New Roman", Times, serif; font-size: 13px; line-height: 1.5; color: #000; padding: 20px; }
+            table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+            td, th { border: 1px solid #000; padding: 6px; vertical-align: top; }
+            p { margin: 4px 0; }
+            @media print {
+              body { padding: 0; margin: 0; }
+              @page { size: A4; margin: 15mm; }
+            }
+          </style>
+        </head>
+        <body>
+          ${htmlContent}
+          <script>window.print(); window.onafterprint = () => window.close();</script>
+        </body>
+        </html>
+      `;
+      
+      const printWindow = window.open("", "_blank", "width=1200,height=900");
+      if (!printWindow) return;
+      printWindow.document.write(html);
+      printWindow.document.close();
+      
+    } catch (err) {
+      console.error("Lỗi tạo tờ khai thuế:", err);
+      setError("Không thể tạo tờ khai thuế. Lỗi: " + (err as Error).message);
+    }
   };
 
   return (
@@ -238,6 +367,9 @@ export default function ReportsPage() {
           </button>
           <button onClick={printPdfView} disabled={!report} className="app-button-primary px-4 py-2 text-sm font-semibold">
             In / PDF
+          </button>
+          <button onClick={() => void printTaxReport()} disabled={!report} className="app-button-primary border-amber-600 bg-amber-600 hover:bg-amber-700 px-4 py-2 text-sm font-semibold text-white">
+            In Tờ Khai Thuế (PDF)
           </button>
         </div>
       </div>

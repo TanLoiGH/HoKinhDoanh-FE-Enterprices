@@ -99,7 +99,7 @@ export default function ProductsPage() {
     if (!form.id) {
       void fetchNextCode();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
 
   useEffect(() => {
@@ -295,100 +295,107 @@ export default function ProductsPage() {
         onSubmit={handleSubmit}
         className="app-panel-strong grid animate-in grid-cols-1 gap-4 slide-in-from-top-10 p-4 sm:p-5 md:grid-cols-2 md:p-6 lg:grid-cols-12"
       >
-        {/* Mã & Tên sản phẩm */}
+        {/* Cột: Mã + Tên sản phẩm */}
         <div className="md:col-span-1 lg:col-span-4 space-y-1">
-          <label className="ml-2 text-[10px] font-black uppercase tracking-widest text-app-soft">
-            Mã & Tên sản phẩm
-          </label>
-          <div className="flex gap-2">
-            <div className="relative w-1/3 min-w-[86px]">
-              <input
-                id="product-code"
-                required
-                value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                placeholder="SP001"
-                className="app-control w-full px-3 py-3 text-sm font-bold uppercase md:px-4"
-                title={form.id ? "Mã sản phẩm" : "Mã được gợi ý tự động, bạn có thể tự chỉnh"}
-              />
-              {!form.id && (
-                <span
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-blue-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-500"
-                >
-                  Auto
-                </span>
-              )}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
+                Mã sản phẩm
+              </label>
+              <div className="relative">
+                <input
+                  id="product-code"
+                  required
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                  placeholder="SP001"
+                  className="app-control w-full px-3 py-3 text-sm font-bold uppercase md:px-4"
+                  title={form.id ? "Mã sản phẩm" : "Mã được gợi ý tự động, bạn có thể tự chỉnh"}
+                />
+                {!form.id && (
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-blue-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-500">
+                    Auto
+                  </span>
+                )}
+              </div>
             </div>
-            <input
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Tên sản phẩm..."
-              className="app-control flex-1 px-4 py-3 text-sm font-bold"
-            />
+            <div className="space-y-1">
+              <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
+                Tên sản phẩm
+              </label>
+              <input
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Tên sản phẩm..."
+                className="app-control w-full px-4 py-3 text-sm font-bold"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Phân loại & Đơn vị (Đã tách riêng layout flex linh hoạt) */}
+        {/* Cột: Phân loại + Đơn vị */}
         <div className="md:col-span-1 lg:col-span-4 space-y-1">
-          <label className="ml-2 text-[10px] font-black uppercase tracking-widest text-app-soft">
-            Phân loại & Đơn vị
-          </label>
-          <div className="flex flex-row gap-2">
-            <select
-              value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: Number(e.target.value) })}
-              className="app-control min-w-0 flex-[2] px-4 py-3 text-sm font-bold"
-            >
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-            <input
-              value={form.unit}
-              onChange={(e) => setForm({ ...form, unit: e.target.value })}
-              placeholder="ĐVT (vd: kg, gói, chai...)"
-              className="app-control min-w-[86px] flex-[1] px-3 py-3 text-center text-sm font-bold md:px-4 md:text-left"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
+                Phân loại
+              </label>
+              <select
+                value={form.categoryId}
+                onChange={(e) => setForm({ ...form, categoryId: Number(e.target.value) })}
+                className="app-control w-full px-4 py-3 text-sm font-bold"
+              >
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
+                Đơn vị tính
+              </label>
+              <input
+                value={form.unit}
+                onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                placeholder="VD: kg, gói, chai..."
+                className="app-control w-full px-3 py-3 text-center text-sm font-bold md:px-4 md:text-left"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Giá vốn & Giá bán */}
+        {/* Cột: Giá vốn & Giá bán (giữ nguyên như cũ) */}
         <div className="md:col-span-2 lg:col-span-4 grid grid-cols-2 gap-2">
           <div className="space-y-1">
-            <label className="ml-2 text-[10px] font-black uppercase tracking-widest text-app-soft">
+            <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
               Giá vốn
             </label>
             <input
               type="number"
               min="0"
               value={form.costPrice || ""}
-              onChange={(e) =>
-                setForm({ ...form, costPrice: Number(e.target.value) })
-              }
+              onChange={(e) => setForm({ ...form, costPrice: Number(e.target.value) })}
               placeholder="0"
-              className="app-control w-full px-4 py-3 text-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="app-control w-full px-4 py-3 text-sm font-bold [appearance:textfield]"
             />
           </div>
-
           <div className="space-y-1">
-            <label className="ml-2 text-[10px] font-black uppercase tracking-widest text-app-soft">
+            <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
               Giá bán
             </label>
             <input
               type="number"
               min="0"
               value={form.sellPrice || ""}
-              onChange={(e) =>
-                setForm({ ...form, sellPrice: Number(e.target.value) })
-              }
+              onChange={(e) => setForm({ ...form, sellPrice: Number(e.target.value) })}
               placeholder="0"
-              className="app-control w-full px-4 py-3 text-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="app-control w-full px-4 py-3 text-sm font-bold [appearance:textfield]"
             />
           </div>
         </div>
 
-        {/* Nút Submit */}
+        {/* Nút submit */}
         <div className="md:col-span-2 lg:col-span-12 flex flex-col md:flex-row justify-end gap-2 mt-2">
           {form.id && (
             <button
@@ -421,11 +428,10 @@ export default function ProductsPage() {
                 setActiveTab("active");
                 setSelectedIds([]);
               }}
-              className={`rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${
-                activeTab === "active"
-                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                  : "text-app-muted hover:bg-[color:var(--surface-3)] hover:text-app-strong"
-              }`}
+              className={`rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${activeTab === "active"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                : "text-app-muted hover:bg-[color:var(--surface-3)] hover:text-app-strong"
+                }`}
             >
               Đang hoạt động
             </button>
@@ -435,11 +441,10 @@ export default function ProductsPage() {
                 setActiveTab("trash");
                 setSelectedIds([]);
               }}
-              className={`rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${
-                activeTab === "trash"
-                  ? "bg-red-600 text-white shadow-md shadow-red-500/20"
-                  : "text-app-muted hover:bg-[color:var(--surface-3)] hover:text-app-strong"
-              }`}
+              className={`rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all duration-200 ${activeTab === "trash"
+                ? "bg-red-600 text-white shadow-md shadow-red-500/20"
+                : "text-app-muted hover:bg-[color:var(--surface-3)] hover:text-app-strong"
+                }`}
             >
               Thùng rác (Xóa mềm)
             </button>
@@ -509,15 +514,14 @@ export default function ProductsPage() {
                       }
                     }
                   }}
-                  className={`app-list-item w-full border-2 p-4 text-left transition-all active:scale-[0.99] ${
-                    activeTab === "trash"
-                      ? isSelected
-                        ? "border-emerald-500 bg-emerald-50/10 shadow-md"
-                        : "border-transparent shadow-sm"
-                      : form.id === product.id
+                  className={`app-list-item w-full border-2 p-4 text-left transition-all active:scale-[0.99] ${activeTab === "trash"
+                    ? isSelected
+                      ? "border-emerald-500 bg-emerald-50/10 shadow-md"
+                      : "border-transparent shadow-sm"
+                    : form.id === product.id
                       ? "border-blue-200 bg-[color:var(--brand-surface)]"
                       : "border-transparent shadow-sm"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2.5 min-w-0">
@@ -674,15 +678,14 @@ export default function ProductsPage() {
                           setForm(product);
                         }
                       }}
-                      className={`group cursor-pointer transition-all hover:bg-[color:var(--brand-surface)] ${
-                        activeTab === "trash"
-                          ? isSelected
-                            ? "bg-emerald-50/10 hover:bg-emerald-50/20"
-                            : ""
-                          : form.id === product.id
+                      className={`group cursor-pointer transition-all hover:bg-[color:var(--brand-surface)] ${activeTab === "trash"
+                        ? isSelected
+                          ? "bg-emerald-50/10 hover:bg-emerald-50/20"
+                          : ""
+                        : form.id === product.id
                           ? "bg-[color:var(--brand-surface)]"
                           : ""
-                      }`}
+                        }`}
                     >
                       {activeTab === "trash" && (
                         <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
