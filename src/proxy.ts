@@ -6,11 +6,9 @@ export function proxy(request: NextRequest) {
   const rolesCookie = request.cookies.get("userRoles")?.value;
   const pathname = request.nextUrl.pathname;
 
-  // 1. Bảo vệ trang Khách hàng (yêu cầu đăng nhập)
-  if (
-    (pathname.startsWith("/checkout") || pathname.startsWith("/orders")) &&
-    !token
-  ) {
+  // 1. Bảo vệ checkout nếu chạy trực tiếp qua middleware.
+  // Các màn app như /orders dùng AuthGuard phía client vì token hiện được lưu trong Zustand/localStorage.
+  if (pathname.startsWith("/checkout") && !token) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
@@ -46,6 +44,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Nhớ thêm route /admin vào matcher để middleware theo dõi
-  matcher: ["/checkout/:path*", "/orders/:path*", "/admin/:path*"],
+  matcher: ["/checkout/:path*", "/admin/:path*"],
 };

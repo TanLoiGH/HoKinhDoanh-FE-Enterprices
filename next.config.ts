@@ -7,10 +7,26 @@ const withPWA = withPWAInit({
   register: true,
 });
 
+const apiRewriteTarget =
+  process.env.API_REWRITE_TARGET ||
+  process.env.NEXT_PUBLIC_LOCAL_API_URL?.replace(/\/api\/?$/, "") ||
+  "http://localhost:5122";
+
 const nextConfig: NextConfig = {
-  /* config options here */
   output: 'standalone',
   turbopack: {},
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${apiRewriteTarget}/api/:path*`,
+      },
+      {
+        source: "/hubs/:path*",
+        destination: `${apiRewriteTarget}/hubs/:path*`,
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);

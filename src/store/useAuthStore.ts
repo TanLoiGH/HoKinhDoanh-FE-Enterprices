@@ -6,6 +6,7 @@ export interface User {
   email: string;
   fullName: string;
   role: 'Admin' | 'Cashier' | 'Warehouse';
+  tenantId?: number;
   branchId: number | null;
   token: string;
   refreshToken: string;
@@ -50,4 +51,3 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
-

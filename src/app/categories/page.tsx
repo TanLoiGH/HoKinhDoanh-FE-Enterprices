@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/apiErrorMessage";
 import { Tag, Plus, Edit2, Trash2, Search, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import StatePagination from "@/components/ui/StatePagination";
@@ -53,8 +54,7 @@ export default function CategoriesPage() {
       fetchCategories();
     } catch (error) {
       console.error("Lỗi lưu danh mục:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi lưu danh mục!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi lưu danh mục!"));
     } finally {
       setSaving(false);
     }

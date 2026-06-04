@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import api from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrorMessage";
 import StatePagination from "@/components/ui/StatePagination";
 import toast from "react-hot-toast";
 
@@ -28,9 +29,19 @@ interface UserListItem {
   email: string;
   fullName: string;
   role: Role;
+  tenantId: number;
   branchId: number | null;
   isActive: boolean;
   branchName: string | null;
+}
+
+interface BranchOption {
+  id: number;
+  tenantId: number;
+  name: string;
+  address: string;
+  phone: string;
+  isMain: boolean;
 }
 
 interface UserForm {
@@ -48,7 +59,7 @@ const emptyForm: UserForm = {
   fullName: "",
   password: "",
   role: "Cashier",
-  branchId: "1",
+  branchId: "",
   isActive: true,
 };
 
@@ -60,6 +71,7 @@ const roleLabel: Record<Role, string> = {
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<UserListItem[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -68,6 +80,11 @@ export default function UserManagementPage() {
   const pageSize = 10;
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const createEmptyForm = useCallback((branchList = branches): UserForm => ({
+    ...emptyForm,
+    branchId: branchList[0]?.id ? String(branchList[0].id) : "",
+  }), [branches]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -83,9 +100,19 @@ export default function UserManagementPage() {
     }
   }, []);
 
+  const fetchBranches = useCallback(async () => {
+    const res = await api.get<BranchOption[]>("/branches");
+    const branchList = res.data;
+    setBranches(branchList);
+    setForm((current) => {
+      if (current.branchId || branchList.length === 0) return current;
+      return { ...current, branchId: String(branchList[0].id) };
+    });
+  }, []);
+
   useEffect(() => {
-    void Promise.resolve().then(fetchUsers);
-  }, [fetchUsers]);
+    void Promise.all([fetchBranches(), fetchUsers()]);
+  }, [fetchBranches, fetchUsers]);
 
   const processedUsers = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
@@ -117,8 +144,9 @@ export default function UserManagementPage() {
       total: users.length,
       active: users.filter((u) => u.isActive).length,
       admins: users.filter((u) => u.role === "Admin").length,
+      branches: branches.length,
     }),
-    [users],
+    [branches.length, users],
   );
 
   const selectUser = (user: UserListItem) => {
@@ -130,20 +158,15 @@ export default function UserManagementPage() {
       fullName: user.fullName,
       password: "",
       role: user.role,
-      branchId: String(user.branchId ?? 1),
+      branchId: String(user.branchId ?? branches[0]?.id ?? ""),
       isActive: user.isActive,
     });
   };
 
   const resetForm = () => {
-    setForm(emptyForm);
+    setForm(createEmptyForm());
     setMessage("");
     setError("");
-  };
-
-  const apiErrorMessage = (err: unknown, fallback: string) => {
-    const responseError = err as { response?: { data?: string } };
-    return responseError.response?.data || fallback;
   };
 
   const submitForm = async (event: React.FormEvent) => {
@@ -155,7 +178,7 @@ export default function UserManagementPage() {
       const payload = {
         fullName: form.fullName.trim(),
         role: form.role,
-        branchId: Number(form.branchId || 1),
+        branchId: Number(form.branchId || branches[0]?.id || 0),
         isActive: form.isActive,
       };
 
@@ -173,11 +196,11 @@ export default function UserManagementPage() {
         const msg = "Đã tạo người dùng mới.";
         setMessage(msg);
         toast.success(msg);
-        setForm(emptyForm);
+        setForm(createEmptyForm());
       }
       await fetchUsers();
     } catch (err) {
-      const errMsg = apiErrorMessage(err, "Không lưu được người dùng.");
+      const errMsg = getApiErrorMessage(err, "Không lưu được người dùng.");
       setError(errMsg);
       toast.error(errMsg);
     } finally {
@@ -197,7 +220,7 @@ export default function UserManagementPage() {
       await fetchUsers();
       if (form.id === user.id) resetForm();
     } catch (err) {
-      const errMsg = apiErrorMessage(err, "Không khóa được tài khoản.");
+      const errMsg = getApiErrorMessage(err, "Không khóa được tài khoản.");
       setError(errMsg);
       toast.error(errMsg);
     }
@@ -210,7 +233,7 @@ export default function UserManagementPage() {
       await api.put(`/users/${user.id}`, {
         fullName: user.fullName,
         role: user.role,
-        branchId: user.branchId ?? 1,
+        branchId: user.branchId ?? branches[0]?.id ?? 0,
         isActive: !user.isActive,
       });
       const msg = user.isActive ? "Đã khóa tài khoản." : "Đã mở lại tài khoản.";
@@ -218,7 +241,7 @@ export default function UserManagementPage() {
       toast.success(msg);
       await fetchUsers();
     } catch (err) {
-      const errMsg = apiErrorMessage(err, "Không cập nhật trạng thái tài khoản.");
+      const errMsg = getApiErrorMessage(err, "Không cập nhật trạng thái tài khoản.");
       setError(errMsg);
       toast.error(errMsg);
     }
@@ -264,6 +287,7 @@ export default function UserManagementPage() {
           ["Tổng nhân viên", stats.total, Users, "bg-blue-50 text-blue-600"],
           ["Đang hoạt động", stats.active, CheckCircle2, "bg-emerald-50 text-emerald-600"],
           ["Quản trị viên", stats.admins, ShieldCheck, "bg-purple-50 text-purple-600"],
+          ["Chi nhánh", stats.branches, Building2, "bg-slate-100 text-slate-700"],
         ] as Array<[string, number, LucideIcon, string]>).map(([label, value, Icon, color]) => (
           <div key={label} className="app-kpi-card p-5">
             <div className="flex items-center gap-4">
@@ -345,13 +369,22 @@ export default function UserManagementPage() {
               </div>
               <div>
                 <label className="mb-1 ml-2 block text-[10px] font-black uppercase tracking-widest text-app-soft">Chi nhánh</label>
-                <input
-                  type="number"
-                  min="1"
+                <select
+                  required
                   value={form.branchId}
                   onChange={(event) => setForm({ ...form, branchId: event.target.value })}
                   className="app-control w-full px-4 text-sm font-bold"
-                />
+                >
+                  {branches.length === 0 ? (
+                    <option value="">Không có chi nhánh</option>
+                  ) : (
+                    branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}{branch.isMain ? " - chính" : ""}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
             </div>
             {form.id && (

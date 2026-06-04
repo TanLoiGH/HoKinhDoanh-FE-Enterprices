@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 const ROUTE_RULES: Array<{ prefix: string; roles: Array<'Admin' | 'Cashier' | 'Warehouse'> }> = [
   { prefix: '/admin', roles: ['Admin'] },
   { prefix: '/audit', roles: ['Admin'] },
+  { prefix: '/branches', roles: ['Admin'] },
   { prefix: '/users', roles: ['Admin'] },
   { prefix: '/reports', roles: ['Admin'] },
   { prefix: '/revenue-ledger', roles: ['Admin'] },

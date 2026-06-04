@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/apiErrorMessage";
 import { Calculator, Loader2, PlayCircle, StopCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -12,6 +13,15 @@ interface ShiftSummary {
   openingFloat: number;
   cashSalesTotal: number;
   cashOrderCount: number;
+  transferSalesTotal: number;
+  transferOrderCount: number;
+  cardSalesTotal: number;
+  cardOrderCount: number;
+  discountTotal: number;
+  netSalesTotal: number;
+  completedOrderCount: number;
+  cancelledOrderCount: number;
+  cancelledOrderTotal: number;
   expectedInDrawer: number;
   countedCash?: number;
   variance?: number;
@@ -50,8 +60,7 @@ export default function ShiftPage() {
       toast.success("Mở ca làm việc thành công!");
       await load();
     } catch (e: unknown) {
-      const err = e as { response?: { data?: string } };
-      toast.error(err.response?.data || "Không mở được ca");
+      toast.error(getApiErrorMessage(e, "Không mở được ca"));
     } finally {
       setSubmitting(false);
     }
@@ -75,8 +84,7 @@ export default function ShiftPage() {
       toast.success("Chốt ca và đối chiếu thành công!");
       await load();
     } catch (e: unknown) {
-      const err = e as { response?: { data?: string } };
-      toast.error(err.response?.data || "Không chốt được ca");
+      toast.error(getApiErrorMessage(e, "Không chốt được ca"));
     } finally {
       setSubmitting(false);
     }
@@ -146,6 +154,26 @@ export default function ShiftPage() {
                 <span className="text-app-muted">Doanh thu tiền mặt ({summary.cashOrderCount} đơn)</span>
                 <strong>{fmt(summary.cashSalesTotal)}</strong>
               </div>
+              <div className="flex justify-between">
+                <span className="text-app-muted">Chuyển khoản ({summary.transferOrderCount} đơn)</span>
+                <strong>{fmt(summary.transferSalesTotal)}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-muted">Thẻ ({summary.cardOrderCount} đơn)</span>
+                <strong>{fmt(summary.cardSalesTotal)}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-muted">Giảm giá trong ca</span>
+                <strong>{fmt(summary.discountTotal)}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-muted">Đơn hủy ({summary.cancelledOrderCount} đơn)</span>
+                <strong>{fmt(summary.cancelledOrderTotal)}</strong>
+              </div>
+              <div className="flex justify-between border-t border-app pt-3">
+                <span className="font-black">Tổng doanh thu ròng ({summary.completedOrderCount} đơn)</span>
+                <strong>{fmt(summary.netSalesTotal)}</strong>
+              </div>
               <div className="flex justify-between border-t border-app pt-3 text-base">
                 <span className="font-black">Dự kiến trong két</span>
                 <span className="font-black text-blue-600">{fmt(summary.expectedInDrawer)}</span>
@@ -189,6 +217,22 @@ export default function ShiftPage() {
         >
           <h3 className="text-sm font-black uppercase tracking-widest text-app-strong">Kết quả chốt ca</h3>
           <div className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span>Doanh thu ròng</span>
+              <strong>{fmt(lastClose.netSalesTotal)}</strong>
+            </div>
+            <div className="flex justify-between">
+              <span>Tiền mặt</span>
+              <strong>{fmt(lastClose.cashSalesTotal)}</strong>
+            </div>
+            <div className="flex justify-between">
+              <span>Chuyển khoản / thẻ</span>
+              <strong>{fmt(lastClose.transferSalesTotal + lastClose.cardSalesTotal)}</strong>
+            </div>
+            <div className="flex justify-between">
+              <span>Đơn hủy</span>
+              <strong>{fmt(lastClose.cancelledOrderTotal)}</strong>
+            </div>
             <div className="flex justify-between">
               <span>Dự kiến</span>
               <strong>{fmt(lastClose.expectedInDrawer)}</strong>

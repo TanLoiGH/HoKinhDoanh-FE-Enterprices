@@ -18,6 +18,7 @@ import {
   BarChart3, 
   History,
   Users,
+  Building2,
   Tag,
   Calculator,
   BookOpen,
@@ -115,6 +116,7 @@ export default function RootLayout({
         { name: 'Sổ doanh thu', href: '/revenue-ledger', icon: BookOpen, roles: ['Admin'] as AppRole[], color: 'text-teal-400', bgColor: 'bg-teal-400/10' },
         ...(user?.role === 'Admin' ? [{ name: 'Audit Log', href: '/audit', icon: History, color: 'text-cyan-400', bgColor: 'bg-cyan-400/10' }] : []),
         { name: 'Khách hàng', href: '/customers', icon: Users, color: 'text-pink-400', bgColor: 'bg-pink-400/10' },
+        ...(user?.role === 'Admin' ? [{ name: 'Chi nhánh', href: '/branches', icon: Building2, color: 'text-slate-400', bgColor: 'bg-slate-400/10' }] : []),
         ...(user?.role === 'Admin' ? [{ name: 'Người dùng', href: '/users', icon: Users, color: 'text-indigo-400', bgColor: 'bg-indigo-400/10' }] : []),
       ]
     }

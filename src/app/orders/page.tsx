@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/apiErrorMessage";
 import { useAuthStore } from "@/store/useAuthStore";
-import { Ban, Loader2, ShieldCheck, Pencil } from "lucide-react";
+import { Ban, Download, Filter, Loader2, Pencil, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
@@ -18,13 +19,34 @@ interface OrderRow {
   paymentReference?: string | null;
   status: string;
   cashierName: string;
+  customerId?: number | null;
+  customerName: string;
 }
+
+interface CustomerOption {
+  id: number;
+  fullName: string;
+  phone: string;
+}
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const daysAgoIso = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days + 1);
+  return date.toISOString().slice(0, 10);
+};
 
 export default function OrdersPage() {
   const { user } = useAuthStore();
   const isManager = user?.role === "Admin";
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [from, setFrom] = useState(daysAgoIso(30));
+  const [to, setTo] = useState(todayIso());
+  const [status, setStatus] = useState("");
+  const [customerId, setCustomerId] = useState("");
   const [cancelTarget, setCancelTarget] = useState<OrderRow | null>(null);
   const [managerEmail, setManagerEmail] = useState("");
   const [managerPassword, setManagerPassword] = useState("");
@@ -35,21 +57,69 @@ export default function OrdersPage() {
   const [editPaid, setEditPaid] = useState("");
   const [editConfirmed, setEditConfirmed] = useState(false);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<OrderRow[]>("/orders");
+      const res = await api.get<OrderRow[]>("/orders", {
+        params: {
+          take: 500,
+          from,
+          to,
+          status: status || undefined,
+          customerId: customerId || undefined,
+        },
+      });
       setOrders(res.data);
     } finally {
       setLoading(false);
     }
-  };
+  }, [from, to, status, customerId]);
 
   useEffect(() => {
     void fetchOrders();
+  }, [fetchOrders]);
+
+  useEffect(() => {
+    void api.get<CustomerOption[]>("/customers").then((response) => setCustomers(response.data)).catch(() => setCustomers([]));
   }, []);
 
   const fmt = (n: number) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(n);
+
+  const totals = useMemo(() => {
+    const completed = orders.filter((order) => order.status === "Completed");
+    return {
+      count: orders.length,
+      revenue: completed.reduce((sum, order) => sum + order.totalAmount - order.discount, 0),
+      discount: completed.reduce((sum, order) => sum + order.discount, 0),
+      cancelled: orders.filter((order) => order.status === "Cancelled").length,
+    };
+  }, [orders]);
+
+  const downloadCsv = async () => {
+    const params = new URLSearchParams({
+      from,
+      to,
+    });
+    if (status) params.set("status", status);
+    if (customerId) params.set("customerId", customerId);
+
+    setExporting(true);
+    try {
+      const response = await api.get<Blob>(`/orders/export.csv?${params.toString()}`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `lich-su-don-hang-${from}-${to}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Không xuất được CSV đơn hàng"));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleCancel = async () => {
     if (!cancelTarget) return;
@@ -67,8 +137,7 @@ export default function OrdersPage() {
       toast.success("Đã hủy đơn hàng thành công!");
       await fetchOrders();
     } catch (e: unknown) {
-      const err = e as { response?: { data?: string } };
-      toast.error(err.response?.data || "Không hủy được đơn hàng");
+      toast.error(getApiErrorMessage(e, "Không hủy được đơn hàng"));
     } finally {
       setSubmitting(false);
     }
@@ -94,8 +163,7 @@ export default function OrdersPage() {
       toast.success("Cập nhật tiền khách đưa thành công!");
       await fetchOrders();
     } catch (e: unknown) {
-      const err = e as { response?: { data?: string } };
-      toast.error(err.response?.data || "Không cập nhật được");
+      toast.error(getApiErrorMessage(e, "Không cập nhật được"));
     } finally {
       setSubmitting(false);
     }
@@ -103,14 +171,41 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="app-kicker mb-2">Quản lý bán hàng</p>
-        <h1 className="app-title text-2xl font-black">Đơn hàng</h1>
-        <p className="mt-1 text-sm text-app-muted">
-          {isManager
-            ? "Quản lý có quyền sửa tiền mặt và hủy đơn (yêu cầu xác thực quản lý khi hủy)."
-            : "Nhân viên chỉ xem đơn. Hủy đơn cần xác nhận mật khẩu quản lý."}
-        </p>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p className="app-kicker mb-2">Quản lý bán hàng</p>
+          <h1 className="app-title text-2xl font-black">Lịch sử đơn hàng</h1>
+          <p className="mt-1 text-sm text-app-muted">
+            Lọc theo ngày, khách hàng, trạng thái và xuất CSV cho kế toán hoặc đối soát ca.
+          </p>
+        </div>
+        <div className="app-panel grid gap-2 p-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-[150px_150px_180px_150px_auto]">
+          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="app-control px-3 py-2 text-sm font-semibold" />
+          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="app-control px-3 py-2 text-sm font-semibold" />
+          <select value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="app-control px-3 py-2 text-sm font-semibold">
+            <option value="">Tất cả khách</option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>{customer.fullName}</option>
+            ))}
+          </select>
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="app-control px-3 py-2 text-sm font-semibold">
+            <option value="">Tất cả trạng thái</option>
+            <option value="Completed">Hoàn tất</option>
+            <option value="Pending">Chờ thanh toán</option>
+            <option value="Cancelled">Đã hủy</option>
+          </select>
+          <button onClick={() => void downloadCsv()} disabled={exporting} className="app-button-primary flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold">
+            <Download className="h-4 w-4" />
+            {exporting ? "Đang xuất" : "CSV"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="app-kpi-card p-4"><p className="text-xs font-bold text-app-muted">Số đơn</p><p className="mt-2 text-2xl font-black text-app-strong">{totals.count}</p></div>
+        <div className="app-kpi-card p-4"><p className="text-xs font-bold text-app-muted">Doanh thu hoàn tất</p><p className="mt-2 text-xl font-black text-emerald-600">{fmt(totals.revenue)}</p></div>
+        <div className="app-kpi-card p-4"><p className="text-xs font-bold text-app-muted">Giảm giá</p><p className="mt-2 text-xl font-black text-blue-600">{fmt(totals.discount)}</p></div>
+        <div className="app-kpi-card p-4"><p className="text-xs font-bold text-app-muted">Đơn hủy</p><p className="mt-2 text-2xl font-black text-rose-600">{totals.cancelled}</p></div>
       </div>
 
       {loading ? (
@@ -119,6 +214,12 @@ export default function OrdersPage() {
         </div>
       ) : (
         <div className="space-y-3">
+          {orders.length === 0 && (
+            <div className="app-panel-strong flex flex-col items-center gap-3 py-16 text-center">
+              <Filter className="h-8 w-8 text-app-soft" />
+              <p className="text-sm font-bold text-app-muted">Không có đơn hàng phù hợp bộ lọc.</p>
+            </div>
+          )}
           {orders.map((o) => {
             const due = o.totalAmount - o.discount;
             const change = Math.max(0, o.paidAmount - due);
@@ -133,6 +234,8 @@ export default function OrdersPage() {
                       {new Date(o.createdAt).toLocaleString("vi-VN")} · {o.cashierName}
                     </p>
                     <p className="mt-1 text-xs font-bold text-app-muted">
+                      {o.customerName || "Khách vãng lai"}
+                      {" · "}
                       {o.paymentMethod}
                       {o.paymentReference ? ` · ${o.paymentReference}` : ""}
                       {" · "}

@@ -11,6 +11,18 @@ copy .env.example .env.local
 Biến cần có:
 
 - `NEXT_PUBLIC_LOCAL_API_URL` (ví dụ `http://localhost:5122/api`)
+- `NEXT_PUBLIC_USE_PROXY` (mặc định `true` cho môi trường local)
+
+## Chạy bằng Docker
+
+Frontend được build trong stack Docker của backend để nằm cùng nhóm `be` với API, Redis và SQL Server.
+
+```powershell
+cd D:\MyProject\BE
+docker compose up -d --build
+```
+
+Mở [http://localhost:3000](http://localhost:3000).
 
 ## Getting Started
 

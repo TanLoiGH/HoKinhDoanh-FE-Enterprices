@@ -3,56 +3,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import api from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/apiErrorMessage";
 import toast from "react-hot-toast";
 import StatePagination from "@/components/ui/StatePagination";
-
-interface Category {
-  id: number;
-  name: string;
-}
-
-interface Product {
-  id: number;
-  code: string;
-  name: string;
-  categoryId: number;
-  categoryName: string;
-  unit: string;
-  costPrice: number;
-  sellPrice: number;
-  stock: number;
-  minStock: number;
-}
-
-type ProductForm = Omit<Product, "id" | "stock" | "categoryName"> & { id?: number };
-
-const emptyForm: ProductForm = {
-  code: "",
-  name: "",
-  categoryId: 1, // Mặc định là danh mục 1 (Chưa phân loại)
-  unit: "",
-  costPrice: 0,
-  sellPrice: 0,
-  minStock: 5,
-};
+import { createEditProductForm, emptyProductForm } from "@/features/product-catalog/form";
+import { fetchNextProductCode, fetchProductsByTab, saveProductBarcodeIfNeeded } from "@/features/product-catalog/product-api";
+import type { Category, Product, ProductForm, ProductListTab } from "@/features/product-catalog/types";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState<ProductForm>(emptyForm);
+  const [form, setForm] = useState<ProductForm>(emptyProductForm);
   const [categories, setCategories] = useState<Category[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
-  const [activeTab, setActiveTab] = useState<"active" | "trash">("active");
+  const [activeTab, setActiveTab] = useState<ProductListTab>("active");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const fetchNextCode = async () => {
     try {
-      const response = await api.get<{ nextCode: string }>("/products/next-code");
-      const code = response.data.nextCode;
+      const code = await fetchNextProductCode();
       setForm((prev) => {
         if (!prev.id) {
           return { ...prev, code };
@@ -67,10 +40,8 @@ export default function ProductsPage() {
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get<Product[]>("/products", {
-        params: { deletedOnly: activeTab === "trash" }
-      });
-      setProducts(response.data);
+      const data = await fetchProductsByTab(activeTab);
+      setProducts(data);
       setSelectedIds([]); // Reset bulk selection on data reload
     } catch (error) {
       console.error("Lỗi khi tải sản phẩm:", error);
@@ -156,19 +127,20 @@ export default function ProductsPage() {
     try {
       if (form.id) {
         await api.put(`/products/${form.id}`, { ...form, id: form.id });
+        await saveProductBarcodeIfNeeded(form.id, form);
         toast.success("Cập nhật sản phẩm thành công!");
       } else {
-        await api.post("/products", form);
+        const createResponse = await api.post<number>("/products", form);
+        await saveProductBarcodeIfNeeded(createResponse.data, form);
         toast.success("Thêm sản phẩm thành công!");
       }
       // Reset form, mã sẽ được tự cập nhật bởi fetchNextCode
-      setForm(emptyForm);
+      setForm(emptyProductForm);
       await fetchProducts();
       await fetchNextCode();
     } catch (error) {
       console.error("Lỗi lưu sản phẩm:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi lưu sản phẩm!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi lưu sản phẩm!"));
     } finally {
       setSaving(false);
     }
@@ -183,8 +155,7 @@ export default function ProductsPage() {
       await fetchProducts();
     } catch (error) {
       console.error("Lỗi xóa sản phẩm:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi xóa sản phẩm!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi xóa sản phẩm!"));
     }
   };
 
@@ -196,8 +167,7 @@ export default function ProductsPage() {
       await fetchNextCode();
     } catch (error) {
       console.error("Lỗi khôi phục sản phẩm:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi khôi phục sản phẩm!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi khôi phục sản phẩm!"));
     }
   };
 
@@ -212,8 +182,7 @@ export default function ProductsPage() {
       await fetchNextCode();
     } catch (error) {
       console.error("Lỗi khôi phục hàng loạt sản phẩm:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi khôi phục hàng loạt!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi khôi phục hàng loạt!"));
     }
   };
 
@@ -227,8 +196,7 @@ export default function ProductsPage() {
       await fetchNextCode();
     } catch (error) {
       console.error("Lỗi xóa vĩnh viễn sản phẩm:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi xóa vĩnh viễn sản phẩm!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi xóa vĩnh viễn sản phẩm!"));
     }
   };
 
@@ -244,8 +212,7 @@ export default function ProductsPage() {
       await fetchNextCode();
     } catch (error) {
       console.error("Lỗi xóa vĩnh viễn hàng loạt sản phẩm:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi xóa vĩnh viễn hàng loạt!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi xóa vĩnh viễn hàng loạt!"));
     }
   };
 
@@ -276,6 +243,10 @@ export default function ProductsPage() {
       }).format(amount),
     [],
   );
+
+  const selectProductForEdit = (product: Product) => {
+    setForm(createEditProductForm(product));
+  };
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-4 pb-20 sm:space-y-5 md:space-y-6 md:px-4">
@@ -365,8 +336,19 @@ export default function ProductsPage() {
           </div>
         </div>
 
-        {/* Cột: Giá vốn & Giá bán (giữ nguyên như cũ) */}
-        <div className="md:col-span-2 lg:col-span-4 grid grid-cols-2 gap-2">
+        {/* Cột: Barcode + Giá vốn & Giá bán */}
+        <div className="md:col-span-2 lg:col-span-4 grid grid-cols-3 gap-2">
+          <div className="space-y-1">
+            <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
+              Barcode
+            </label>
+            <input
+              value={form.barcode ?? ""}
+              onChange={(e) => setForm({ ...form, barcode: e.target.value.trim() })}
+              placeholder="EAN/QR"
+              className="app-control w-full px-3 py-3 text-sm font-bold"
+            />
+          </div>
           <div className="space-y-1">
             <label className="text-[10px] pl-2 font-black uppercase tracking-widest text-app-soft">
               Giá vốn
@@ -401,7 +383,7 @@ export default function ProductsPage() {
             <button
               type="button"
               onClick={() => {
-                setForm(emptyForm);
+                setForm(emptyProductForm);
                 void fetchNextCode();
               }}
               className="app-button-secondary w-full border-2 py-3 text-[10px] font-black uppercase tracking-widest md:w-32"
@@ -500,7 +482,7 @@ export default function ProductsPage() {
                     if (activeTab === "trash") {
                       handleToggleSelect(product.id);
                     } else {
-                      setForm(product);
+                      selectProductForEdit(product);
                     }
                   }}
                   role="button"
@@ -510,7 +492,7 @@ export default function ProductsPage() {
                       if (activeTab === "trash") {
                         handleToggleSelect(product.id);
                       } else {
-                        setForm(product);
+                        selectProductForEdit(product);
                       }
                     }
                   }}
@@ -539,7 +521,10 @@ export default function ProductsPage() {
                       <div className="min-w-0">
                         <p className="text-[10px] font-black uppercase tracking-widest text-app-soft">{product.code}</p>
                         <p className="mt-1 line-clamp-2 text-sm font-black text-app-strong">{product.name}</p>
-                        <p className="mt-2 text-xs font-bold text-app-muted">{product.categoryName || "Chưa phân loại"}</p>
+                        <p className="mt-2 text-xs font-bold text-app-muted">
+                          {product.categoryName || "Chưa phân loại"}
+                          {product.barcodes?.[0]?.barcode ? ` · ${product.barcodes[0].barcode}` : ""}
+                        </p>
                       </div>
                     </div>
                     <span className={`shrink-0 rounded-2xl px-3 py-1.5 text-[10px] font-black uppercase ${product.stock <= product.minStock ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-600"}`}>
@@ -675,7 +660,7 @@ export default function ProductsPage() {
                         if (activeTab === "trash") {
                           handleToggleSelect(product.id);
                         } else {
-                          setForm(product);
+                          selectProductForEdit(product);
                         }
                       }}
                       className={`group cursor-pointer transition-all hover:bg-[color:var(--brand-surface)] ${activeTab === "trash"
@@ -705,6 +690,11 @@ export default function ProductsPage() {
                           <span className="text-sm font-black text-app-strong transition-colors group-hover:text-blue-600">
                             {product.name}
                           </span>
+                          {product.barcodes?.[0]?.barcode && (
+                            <span className="mt-1 text-[10px] font-bold text-app-muted">
+                              Barcode: {product.barcodes[0].barcode}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 hidden md:table-cell">

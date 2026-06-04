@@ -3,11 +3,13 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/apiErrorMessage';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
+import { Building2, Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
+  const [tenantCode, setTenantCode] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -20,7 +22,11 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post('/auth/login', {
+        email,
+        password,
+        tenantCode: tenantCode.trim() || undefined,
+      });
       const data = response.data;
 
       // Normalize role: API may return number (0,1,2) or string
@@ -33,6 +39,7 @@ export default function LoginPage() {
         email: data.email,
         fullName: data.fullName,
         role: roleValue as 'Admin' | 'Cashier' | 'Warehouse', // ensure correct type
+        tenantId: data.tenantId,
         branchId: data.branchId,
         token: data.token,
         refreshToken: data.refreshToken,
@@ -41,8 +48,7 @@ export default function LoginPage() {
       console.log('[Login] Success. Role:', data.role, '| Token (first 20):', data.token?.substring(0, 20));
       router.push('/');
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: string } };
-      setError(axiosErr.response?.data || 'Đăng nhập thất bại. Vui lòng thử lại.');
+      setError(getApiErrorMessage(err, 'Đăng nhập thất bại. Vui lòng thử lại.'));
     } finally {
       setLoading(false);
     }
@@ -78,6 +84,22 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-11 pr-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600/50 focus:border-blue-600 transition-all"
                   placeholder="admin@hkd.local"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Mã cửa hàng</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Building2 className="h-5 w-5 text-slate-500" />
+                </div>
+                <input
+                  type="text"
+                  value={tenantCode}
+                  onChange={(e) => setTenantCode(e.target.value)}
+                  className="block w-full pl-11 pr-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600/50 focus:border-blue-600 transition-all"
+                  placeholder="hkd"
                 />
               </div>
             </div>

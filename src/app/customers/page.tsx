@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/axios";
-import { Users, Plus, Edit2, Search, Loader2, Phone, MapPin, TrendingUp } from "lucide-react";
+import { getApiErrorMessage } from "@/lib/apiErrorMessage";
+import { Plus, Search, Loader2, Phone, MapPin, TrendingUp } from "lucide-react";
 import toast from "react-hot-toast";
 import StatePagination from "@/components/ui/StatePagination";
 
@@ -14,12 +15,30 @@ interface Customer {
   totalSpent: number;
 }
 
+interface CustomerSummary {
+  customer: Customer;
+  orderCount: number;
+  totalSpent: number;
+  debt: number;
+  lastOrders: Array<{
+    id: number;
+    code: string;
+    createdAt: string;
+    netAmount: number;
+    paidAmount: number;
+    status: string;
+    paymentMethod: string;
+  }>;
+}
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ id: 0, fullName: "", phone: "", address: "" });
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -55,14 +74,26 @@ export default function CustomersPage() {
       fetchCustomers();
     } catch (error) {
       console.error("Lỗi lưu khách hàng:", error);
-      const err = error as { response?: { data?: string } };
-      toast.error(err.response?.data || "Lỗi khi lưu khách hàng!");
+      toast.error(getApiErrorMessage(error, "Lỗi khi lưu khách hàng!"));
     } finally {
       setSaving(false);
     }
   };
 
   const fmt = (n: number) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(n);
+
+  const openCustomerDetail = async (customer: Customer) => {
+    setForm(customer);
+    setDetailLoading(true);
+    try {
+      const response = await api.get<CustomerSummary>(`/customers/${customer.id}/summary`);
+      setSelectedCustomer(response.data);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Không tải được lịch sử khách hàng"));
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   const processedCustomers = useMemo(() => {
     let result = customers;
@@ -93,7 +124,7 @@ export default function CustomersPage() {
         <div>
           <p className="app-kicker mb-2">Quản lý quan hệ</p>
           <h1 className="app-title text-3xl font-black uppercase tracking-tight">Khách hàng</h1>
-          <p className="text-sm font-semibold text-app-muted">Lưu trữ thông tin và theo dõi mức độ thân thiết của khách hàng.</p>
+          <p className="text-sm font-semibold text-app-muted">Danh sách khách, lịch sử mua hàng và công nợ phát sinh từ đơn chưa thu đủ.</p>
         </div>
       </div>
 
@@ -182,7 +213,7 @@ export default function CustomersPage() {
               </div>
             ) : (
               paginatedCustomers.map(cust => (
-                <div key={cust.id} className="app-panel-strong group p-5 hover:border-blue-200 transition-all cursor-pointer" onClick={() => setForm(cust)}>
+                <div key={cust.id} className="app-panel-strong group p-5 hover:border-blue-200 transition-all cursor-pointer" onClick={() => void openCustomerDetail(cust)}>
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center font-black text-lg">
@@ -220,6 +251,67 @@ export default function CustomersPage() {
           />
         </div>
       </div>
+
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-end bg-slate-950/60 p-0 backdrop-blur-sm md:items-center md:justify-center md:p-6">
+          <div className="app-panel-strong max-h-[92dvh] w-full overflow-hidden rounded-t-[2rem] md:max-w-2xl md:rounded-[2rem]">
+            <div className="flex items-start justify-between border-b border-app p-5">
+              <div>
+                <p className="app-kicker mb-1">Hồ sơ khách hàng</p>
+                <h2 className="text-xl font-black text-app-strong">{selectedCustomer.customer.fullName}</h2>
+                <p className="mt-1 text-xs font-bold text-app-muted">{selectedCustomer.customer.phone}</p>
+              </div>
+              <button onClick={() => setSelectedCustomer(null)} className="app-button-secondary px-4 py-2 text-xs font-black uppercase">Đóng</button>
+            </div>
+
+            <div className="max-h-[72dvh] overflow-y-auto p-5">
+              {detailLoading ? (
+                <div className="py-12 text-center text-sm font-semibold text-app-muted">Đang tải lịch sử mua hàng...</div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="app-kpi-card p-4">
+                      <p className="text-xs font-bold text-app-muted">Đơn hoàn tất</p>
+                      <p className="mt-2 text-2xl font-black text-app-strong">{selectedCustomer.orderCount}</p>
+                    </div>
+                    <div className="app-kpi-card p-4">
+                      <p className="text-xs font-bold text-app-muted">Đã mua</p>
+                      <p className="mt-2 text-lg font-black text-emerald-600">{fmt(selectedCustomer.totalSpent)}</p>
+                    </div>
+                    <div className="app-kpi-card p-4">
+                      <p className="text-xs font-bold text-app-muted">Công nợ</p>
+                      <p className="mt-2 text-lg font-black text-rose-600">{fmt(selectedCustomer.debt)}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-black text-app-strong">Lịch sử mua gần nhất</h3>
+                    {selectedCustomer.lastOrders.map((order) => (
+                      <div key={order.id} className="app-list-item flex items-center justify-between gap-3 p-4">
+                        <div>
+                          <a href={`/receipt/${order.id}`} className="text-sm font-black text-blue-600 hover:underline">{order.code}</a>
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-app-soft">
+                            {new Date(order.createdAt).toLocaleString("vi-VN")} · {order.paymentMethod} · {order.status}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-black text-app-strong">{fmt(order.netAmount)}</p>
+                          {order.paidAmount < order.netAmount && (
+                            <p className="text-[10px] font-bold text-rose-600">Còn {fmt(order.netAmount - order.paidAmount)}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {selectedCustomer.lastOrders.length === 0 && (
+                      <p className="py-10 text-center text-sm font-semibold text-app-muted">Khách này chưa có đơn hàng.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

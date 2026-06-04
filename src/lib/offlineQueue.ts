@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from "axios";
 
 const STORAGE_KEY = "hkd-offline-mutations";
-const ELIGIBLE_PATHS = ["/orders", "/cashflow", "/inventory/import"];
+const ELIGIBLE_PATHS = ["/orders"];
 
 export interface OfflineMutation {
   id: string;
@@ -9,6 +9,8 @@ export interface OfflineMutation {
   method: "post";
   data: unknown;
   createdAt: string;
+  attempts: number;
+  lastError?: string;
 }
 
 function readQueue(): OfflineMutation[] {
@@ -41,12 +43,32 @@ export function isEligibleOfflineMutation(config?: AxiosRequestConfig) {
 export function enqueueOfflineMutation(config: AxiosRequestConfig) {
   const url = typeof config.url === "string" ? config.url : "";
   const queue = readQueue();
+  const data = config.data ? JSON.parse(config.data as string) : {};
+  if (url.startsWith("/orders") && typeof data === "object" && data !== null && !("clientRequestId" in data)) {
+    (data as { clientRequestId?: string }).clientRequestId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${queue.length + 1}`;
+  }
+
+  const clientRequestId = typeof data === "object" && data !== null
+    ? (data as { clientRequestId?: string }).clientRequestId
+    : undefined;
+  if (clientRequestId && queue.some((item) => {
+    const itemData = item.data as { clientRequestId?: string };
+    return item.url === url && itemData?.clientRequestId === clientRequestId;
+  })) {
+    return queue.find((item) => {
+      const itemData = item.data as { clientRequestId?: string };
+      return item.url === url && itemData?.clientRequestId === clientRequestId;
+    })!;
+  }
+
   const mutation: OfflineMutation = {
     id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${queue.length + 1}`,
     url,
     method: "post",
-    data: config.data ? JSON.parse(config.data as string) : {},
+    data,
     createdAt: new Date().toISOString(),
+    attempts: 0,
   };
 
   queue.push(mutation);
@@ -76,12 +98,16 @@ export async function flushOfflineQueue(options: {
       });
 
       if (!response.ok) {
+        item.attempts = (item.attempts ?? 0) + 1;
+        item.lastError = `${response.status} ${response.statusText}`;
         remaining.push(item);
         continue;
       }
 
       flushed += 1;
     } catch {
+      item.attempts = (item.attempts ?? 0) + 1;
+      item.lastError = "network";
       remaining.push(item);
     }
   }

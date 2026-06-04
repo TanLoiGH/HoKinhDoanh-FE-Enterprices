@@ -1,35 +1,31 @@
 FROM node:20-alpine AS base
 
-# Install dependencies only when needed
+# Cai thu vien he thong can cho mot so package native khi chay tren Alpine.
 FROM base AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Disable Next.js telemetry during the build
 ENV NEXT_TELEMETRY_DISABLED=1
 
-ARG NEXT_PUBLIC_LOCAL_API_URL
+ARG NEXT_PUBLIC_LOCAL_API_URL=http://localhost:5122/api
 ENV NEXT_PUBLIC_LOCAL_API_URL=$NEXT_PUBLIC_LOCAL_API_URL
+ARG API_REWRITE_TARGET=http://localhost:5122
+ENV API_REWRITE_TARGET=$API_REWRITE_TARGET
 
 RUN npm run build
 
-# Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-# Disable Next.js telemetry during runtime
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup --system --gid 1001 nodejs
@@ -37,12 +33,10 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 
-# Set the correct permission for prerender cache
+# Thu muc cache runtime cho Next.js, can quyen ghi cua user nextjs.
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -51,7 +45,6 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT=3000
-# set hostname to localhost
 ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
