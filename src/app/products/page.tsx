@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { ScanBarcode, Trash2 } from "lucide-react";
 import api from "@/lib/axios";
 import { getApiErrorMessage } from "@/lib/apiErrorMessage";
 import toast from "react-hot-toast";
 import StatePagination from "@/components/ui/StatePagination";
 import { createEditProductForm, emptyProductForm } from "@/features/product-catalog/form";
-import { fetchNextProductCode, fetchProductsByTab, saveProductBarcodeIfNeeded } from "@/features/product-catalog/product-api";
+import { buildCreateProductPayload, fetchNextProductCode, fetchProductsByTab, saveProductBarcodeIfNeeded } from "@/features/product-catalog/product-api";
 import type { Category, Product, ProductForm, ProductListTab } from "@/features/product-catalog/types";
+import { scanProduct } from "@/features/barcode/product-scan-api";
+import { useUsbBarcodeScanner } from "@/features/barcode/useUsbBarcodeScanner";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -18,6 +20,8 @@ export default function ProductsPage() {
   const [form, setForm] = useState<ProductForm>(emptyProductForm);
   const [categories, setCategories] = useState<Category[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [usbScanEnabled, setUsbScanEnabled] = useState(true);
+  const [scannerStatus, setScannerStatus] = useState("USB scanner sẵn sàng.");
   const pageSize = 10;
 
   const [activeTab, setActiveTab] = useState<ProductListTab>("active");
@@ -101,7 +105,8 @@ export default function ProductsPage() {
         (p) =>
           p.code.toLowerCase().includes(keyword) ||
           p.name.toLowerCase().includes(keyword) ||
-          (p.categoryName || "").toLowerCase().includes(keyword),
+          (p.categoryName || "").toLowerCase().includes(keyword) ||
+          p.barcodes?.some((barcode) => barcode.barcode.toLowerCase().includes(keyword)),
       );
     }
 
@@ -130,8 +135,7 @@ export default function ProductsPage() {
         await saveProductBarcodeIfNeeded(form.id, form);
         toast.success("Cập nhật sản phẩm thành công!");
       } else {
-        const createResponse = await api.post<number>("/products", form);
-        await saveProductBarcodeIfNeeded(createResponse.data, form);
+        await api.post<number>("/products", buildCreateProductPayload(form));
         toast.success("Thêm sản phẩm thành công!");
       }
       // Reset form, mã sẽ được tự cập nhật bởi fetchNextCode
@@ -248,6 +252,32 @@ export default function ProductsPage() {
     setForm(createEditProductForm(product));
   };
 
+  useUsbBarcodeScanner({
+    enabled: usbScanEnabled,
+    onScan: async (barcode) => {
+      try {
+        const result = await scanProduct(barcode);
+        const product = products.find((item) => item.id === result.productId);
+        setActiveTab("active");
+        setSearch(result.barcode);
+
+        if (product) {
+          selectProductForEdit(product);
+          setScannerStatus(`Đã mở ${product.code} - ${product.name} để chỉnh sửa.`);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          await fetchProducts();
+          setScannerStatus(`Đã tìm thấy ${result.productCode}. Danh sách đang được làm mới.`);
+        }
+      } catch {
+        setActiveTab("active");
+        setForm((current) => ({ ...current, barcode: barcode.trim() }));
+        setScannerStatus(`Mã mới ${barcode.trim()} đã được điền vào form sản phẩm.`);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    },
+  });
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-4 pb-20 sm:space-y-5 md:space-y-6 md:px-4">
       <div className="flex items-center justify-between">
@@ -260,6 +290,16 @@ export default function ProductsPage() {
             Danh mục, giá vốn, giá bán và ngưỡng tồn tối thiểu.
           </p>
         </div>
+        <label className="app-panel-subtle flex min-h-11 items-center gap-3 px-4 text-xs font-black uppercase tracking-wider text-app-base">
+          <ScanBarcode className="h-4 w-4 text-blue-600" />
+          <span className="hidden sm:inline">{scannerStatus}</span>
+          <input
+            type="checkbox"
+            checked={usbScanEnabled}
+            onChange={(event) => setUsbScanEnabled(event.target.checked)}
+            className="h-4 w-4"
+          />
+        </label>
       </div>
 
       <form

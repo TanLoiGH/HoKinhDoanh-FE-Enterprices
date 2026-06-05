@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/axios";
 import { getApiErrorMessage } from "@/lib/apiErrorMessage";
 import StatePagination from "@/components/ui/StatePagination";
-import { Download, History, PackageMinus, PackagePlus, SlidersHorizontal } from "lucide-react";
+import { Download, History, PackageMinus, PackagePlus, ScanBarcode, Search, SlidersHorizontal } from "lucide-react";
+import { scanProduct } from "@/features/barcode/product-scan-api";
+import type { ProductScanResult } from "@/features/barcode/types";
+import { useUsbBarcodeScanner } from "@/features/barcode/useUsbBarcodeScanner";
 
 interface Product {
   id: number;
@@ -38,6 +41,9 @@ export default function InventoryPage() {
   const [targetStock, setTargetStock] = useState("");
   const [importPrice, setImportPrice] = useState("");
   const [note, setNote] = useState("");
+  const [scanBarcode, setScanBarcode] = useState("");
+  const [scanResult, setScanResult] = useState<ProductScanResult | null>(null);
+  const [usbScanEnabled, setUsbScanEnabled] = useState(true);
   const [stockAction, setStockAction] = useState<StockAction>("import");
   const [historyRows, setHistoryRows] = useState<InventoryHistoryRow[]>([]);
   const [historyType, setHistoryType] = useState("");
@@ -47,6 +53,7 @@ export default function InventoryPage() {
   const [message, setMessage] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
+  const isPositiveMessage = message.includes("thành công") || message.startsWith("Đã nhận diện");
 
   const fetchProducts = useCallback(async () => {
     const response = await api.get<Product[]>("/products");
@@ -88,6 +95,11 @@ export default function InventoryPage() {
   }, [fetchProducts, fetchHistory]);
 
   const selectedProduct = products.find((product) => product.id === Number(productId));
+  const activeProductLabel = scanResult
+    ? `${scanResult.productCode} - ${scanResult.productName}`
+    : selectedProduct
+      ? `${selectedProduct.code} - ${selectedProduct.name}`
+      : "";
   const processedProducts = useMemo(() => {
     const filtered = products.filter((product) => !lowStockOnly || product.stock <= product.minStock);
     return [...filtered].sort((a, b) => b.id - a.id);
@@ -109,27 +121,59 @@ export default function InventoryPage() {
     setLoading(true);
     setMessage("");
     try {
+      const scannedBarcode = scanBarcode.trim();
       if (stockAction === "import") {
-        await api.post("/inventory/import", {
-          productId: Number(productId),
-          qty: Number(qty),
-          importPrice: Number(importPrice || 0),
-          note,
-        });
+        if (scannedBarcode) {
+          const response = await api.post<ProductScanResult>("/inventory/import/scan", {
+            barcode: scannedBarcode,
+            qty: Number(qty),
+            importPrice: Number(importPrice || 0),
+            note,
+          });
+          setScanResult(response.data);
+          setProductId(String(response.data.productId));
+        } else {
+          await api.post("/inventory/import", {
+            productId: Number(productId),
+            qty: Number(qty),
+            importPrice: Number(importPrice || 0),
+            note,
+          });
+        }
         setMessage("Nhập kho thành công!");
       } else if (stockAction === "out") {
-        await api.post("/inventory/out", {
-          productId: Number(productId),
-          qty: Number(qty),
-          note,
-        });
+        if (scannedBarcode) {
+          const response = await api.post<ProductScanResult>("/inventory/out/scan", {
+            barcode: scannedBarcode,
+            qty: Number(qty),
+            note,
+          });
+          setScanResult(response.data);
+          setProductId(String(response.data.productId));
+        } else {
+          await api.post("/inventory/out", {
+            productId: Number(productId),
+            qty: Number(qty),
+            note,
+          });
+        }
         setMessage("Xuất kho thành công!");
       } else {
-        await api.post("/inventory/adjust", {
-          productId: Number(productId),
-          targetStock: Number(targetStock),
-          note,
-        });
+        if (scannedBarcode) {
+          const response = await api.post<ProductScanResult>("/inventory/adjust/scan", {
+            barcode: scannedBarcode,
+            targetStock: Number(targetStock),
+            note,
+          });
+          setScanResult(response.data);
+          setProductId(String(response.data.productId));
+        } else {
+          await api.post("/inventory/adjust", {
+            productId: Number(productId),
+            targetStock: Number(targetStock),
+            note,
+          });
+        }
         setMessage("Điều chỉnh tồn thành công!");
       }
       setQty("");
@@ -145,6 +189,34 @@ export default function InventoryPage() {
       setLoading(false);
     }
   };
+
+  const handleScanLookup = async (rawBarcode = scanBarcode) => {
+    const scannedBarcode = rawBarcode.trim();
+    if (!scannedBarcode) {
+      setMessage("Nhập mã vạch hoặc mã sản phẩm để quét.");
+      return;
+    }
+
+    setLoading(true);
+    setMessage("");
+    try {
+      const result = await scanProduct(scannedBarcode);
+      setScanBarcode(scannedBarcode);
+      setScanResult(result);
+      setProductId(String(result.productId));
+      setMessage(`Đã nhận diện ${result.productCode} - ${result.productName}`);
+    } catch (error) {
+      setScanResult(null);
+      setMessage(getApiErrorMessage(error, "Không tìm thấy sản phẩm theo mã quét"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useUsbBarcodeScanner({
+    enabled: usbScanEnabled && !loading,
+    onScan: handleScanLookup,
+  });
 
   const downloadInventoryCsv = () => {
     const header = "MaSanPham,TenSanPham,TonKho,DonVi,TonToiThieu\n";
@@ -187,11 +259,21 @@ export default function InventoryPage() {
           <p className="app-kicker mb-2">Vận hành kho</p>
           <h1 className="app-title text-3xl font-black tracking-tight">Kho hàng</h1>
           <p className="mt-1 text-sm font-semibold text-app-muted">Nhập hàng nhanh trên thiết bị cảm ứng và theo dõi ngưỡng tồn tối thiểu.</p>
+          <label className="mt-3 inline-flex min-h-10 items-center gap-3 rounded-xl bg-[color:var(--surface-3)] px-3 text-xs font-black uppercase tracking-wider text-app-base">
+            <ScanBarcode className="h-4 w-4 text-blue-600" />
+            USB scanner
+            <input
+              type="checkbox"
+              checked={usbScanEnabled}
+              onChange={(event) => setUsbScanEnabled(event.target.checked)}
+              className="h-4 w-4"
+            />
+          </label>
         </div>
 
         <div className="app-panel-strong p-4 md:p-6">
           {message && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${message.includes("thành công") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${isPositiveMessage ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
               {message}
             </div>
           )}
@@ -215,9 +297,58 @@ export default function InventoryPage() {
             ))}
           </div>
           <form onSubmit={handleImport} className="space-y-4">
+            <div className="app-panel-subtle p-3">
+              <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-[0.18em] text-app-soft">Mã quét</label>
+              <div className="flex gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <ScanBarcode className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-app-soft" />
+                  <input
+                    value={scanBarcode}
+                    onChange={(event) => {
+                      setScanBarcode(event.target.value);
+                      setScanResult(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && scanBarcode.trim()) {
+                        event.preventDefault();
+                        void handleScanLookup();
+                      }
+                    }}
+                    className="app-control w-full py-2 pl-9 pr-3 font-semibold"
+                    placeholder="Quét barcode hoặc nhập mã hàng"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleScanLookup()}
+                  disabled={loading || !scanBarcode.trim()}
+                  className="app-button-secondary flex min-h-10 items-center justify-center gap-2 px-3 text-sm font-semibold"
+                  title="Tìm sản phẩm theo mã quét"
+                >
+                  <Search className="h-4 w-4" />
+                  Tìm
+                </button>
+              </div>
+              {scanResult && (
+                <p className="mt-2 text-xs font-semibold text-emerald-700">
+                  Đã quét: {scanResult.productCode} - {scanResult.productName} · tồn {scanResult.stock} {scanResult.unit}
+                </p>
+              )}
+              {!scanResult && activeProductLabel && (
+                <p className="mt-2 text-xs font-semibold text-app-muted">Đang chọn: {activeProductLabel}</p>
+              )}
+            </div>
             <div>
               <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-[0.18em] text-app-soft">Sản phẩm</label>
-              <select required value={productId} onChange={(event) => setProductId(event.target.value)} className="app-control w-full px-3 py-2 font-semibold">
+              <select
+                required={!scanBarcode.trim()}
+                value={productId}
+                onChange={(event) => {
+                  setProductId(event.target.value);
+                  setScanResult(null);
+                }}
+                className="app-control w-full px-3 py-2 font-semibold"
+              >
                 {products.map((product) => (
                   <option key={product.id} value={product.id}>
                     {product.code} - {product.name}
@@ -230,7 +361,9 @@ export default function InventoryPage() {
             </div>
             {stockAction !== "adjust" ? (
             <div>
-              <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-[0.18em] text-app-soft">Số lượng nhập</label>
+              <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-[0.18em] text-app-soft">
+                {stockAction === "import" ? "Số lượng nhập" : "Số lượng xuất"}
+              </label>
               <input type="number" required min="1" value={qty} onChange={(event) => setQty(event.target.value)} className="app-control w-full px-3 py-2 font-semibold" placeholder="100" />
             </div>
             ) : (

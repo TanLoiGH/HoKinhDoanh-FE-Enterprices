@@ -26,3 +26,12 @@ export const saveProductBarcodeIfNeeded = async (productId: number, form: Produc
     isPrimary: true,
   });
 };
+
+export const buildCreateProductPayload = (form: ProductForm) => {
+  const barcode = form.barcode?.trim();
+  return {
+    ...form,
+    primaryBarcode: barcode || undefined,
+    barcodeType: barcode ? "EAN" : undefined,
+  };
+};

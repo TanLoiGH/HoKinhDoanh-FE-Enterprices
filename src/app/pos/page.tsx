@@ -34,6 +34,8 @@ import { PosMobileTabs } from "@/features/pos/PosMobileTabs";
 import { ProductPanel } from "@/features/pos/ProductPanel";
 import { ReceiptSuccessModal } from "@/features/pos/ReceiptSuccessModal";
 import { VietQrPaymentModal } from "@/features/pos/VietQrPaymentModal";
+import { scanProduct } from "@/features/barcode/product-scan-api";
+import { useUsbBarcodeScanner } from "@/features/barcode/useUsbBarcodeScanner";
 
 export default function POSPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -149,56 +151,30 @@ export default function POSPage() {
     }
 
     try {
-      const response = await api.get<{ productId: number; productName: string }>(`/product-barcodes/lookup/${encodeURIComponent(rawValue.trim())}`);
-      const product = products.find((item) => item.id === response.data.productId);
-      if (!product) {
-        setScannerMessage(`Mã ${rawValue} có trong hệ thống nhưng sản phẩm chưa tải trên POS.`);
-        return;
-      }
+      const scanResult = await scanProduct(rawValue);
+      const product = products.find((item) => item.id === scanResult.productId) ?? {
+        id: scanResult.productId,
+        code: scanResult.productCode,
+        name: scanResult.productName,
+        categoryId: 0,
+        categoryName: "Khác",
+        sellPrice: scanResult.sellPrice,
+        stock: scanResult.stock,
+        barcodes: [{ barcode: scanResult.barcode, type: scanResult.matchedBy, isPrimary: true }],
+      };
       addToCart(product);
-      setScannerMessage(`Đã thêm ${response.data.productName}`);
-      toast.success(`Đã thêm ${response.data.productName}`);
+      setScannerMessage(`Đã thêm ${scanResult.productName}`);
+      toast.success(`Đã thêm ${scanResult.productName}`);
     } catch {
       setScannerMessage(`Không tìm thấy mã: ${rawValue}`);
       toast.error(`Không tìm thấy mã: ${rawValue}`);
     }
   }, [addToCart, products]);
 
-  useEffect(() => {
-    if (!usbScanEnabled) return;
-
-    let buffer = "";
-    let lastKeyAt = 0;
-    const maxScannerIntervalMs = 80;
-    const minBarcodeLength = 3;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-
-      const now = Date.now();
-      if (now - lastKeyAt > maxScannerIntervalMs) {
-        buffer = "";
-      }
-      lastKeyAt = now;
-
-      if (event.key === "Enter") {
-        const scannedValue = buffer.trim();
-        buffer = "";
-        if (scannedValue.length >= minBarcodeLength) {
-          event.preventDefault();
-          void addScannedCodeToCart(scannedValue);
-        }
-        return;
-      }
-
-      if (event.key.length === 1) {
-        buffer += event.key;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [addScannedCodeToCart, usbScanEnabled]);
+  useUsbBarcodeScanner({
+    enabled: usbScanEnabled,
+    onScan: addScannedCodeToCart,
+  });
 
   useEffect(() => {
     if (!isScannerOpen) return;
@@ -233,14 +209,7 @@ export default function POSPage() {
       lastDetected = normalized;
       lastDetectedAt = now;
 
-      const matchedProduct = findProductByScannedCode(products, rawValue);
-      if (!matchedProduct) {
-        setScannerMessage(`Không tìm thấy mã: ${rawValue}`);
-        return;
-      }
-
-      addToCart(matchedProduct);
-      setScannerMessage(`Đã thêm ${matchedProduct.name}`);
+      void addScannedCodeToCart(rawValue);
     };
 
     const startScanner = async () => {
@@ -297,7 +266,7 @@ export default function POSPage() {
     return () => {
       stopScanner();
     };
-  }, [addToCart, isScannerOpen, products]);
+  }, [addScannedCodeToCart, isScannerOpen]);
 
   const updateQty = (id: number, delta: number) => {
     setCart(prev => prev
